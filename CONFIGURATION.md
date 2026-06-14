@@ -93,6 +93,41 @@ After editing: `chmod 600 ~/.config/last30days/.env` (or `chmod 600 .claude/last
 
 **Troubleshooting:** if a source you expected to see isn't appearing in results, run `python3 scripts/last30days.py --diagnose`. It prints a per-source availability report (which keys were detected, which CLIs are installed, which backends are reachable) without running a full search.
 
+### Encrypted credential sources (Keychain / pass)
+
+If you'd rather not keep keys in a plaintext `.env`, the loader has two
+encrypted sources that decrypt secrets transiently at call time (never written
+to disk, never logged). Both are **lowest-priority and additive** — an explicit
+`.env` or process-env value always overrides them, so you can mix and match. The
+`pass` source is only consulted for keys still missing after the higher-priority
+sources, so a box that merely has `pass` installed pays no decrypt cost when
+everything is already in `.env`.
+
+| Platform | Source | Store keys with | Lookup convention |
+|---|---|---|---|
+| macOS | Keychain | `scripts/setup-keychain.sh` | service name `last30days-<KEY>` |
+| Linux / Unix (anywhere `pass` exists, incl. macOS) | [`pass`(1)](https://www.passwordstore.org/) | `scripts/setup-pass.sh` | pass path `last30days/<KEY>` |
+
+```bash
+# macOS Keychain
+./scripts/setup-keychain.sh                 # interactive; --list / --delete KEY
+
+# pass(1) — Linux/Unix analog
+./scripts/setup-pass.sh                      # interactive; --list / --delete KEY
+./scripts/setup-pass.sh SCRAPECREATORS_API_KEY   # just one key
+```
+
+The `pass` source honors `PASSWORD_STORE_DIR`. If your store organizes secrets
+under a different prefix, point the loader at it with `LAST30DAYS_PASS_PREFIX`
+(works from your `.env` too, and must match where `setup-pass.sh` wrote them).
+The prefix is used verbatim, so keep the trailing separator:
+
+```bash
+export LAST30DAYS_PASS_PREFIX="secrets/last30days/"   # default: last30days/
+```
+
+Both sources cover the same key set as the `.env` skeleton above.
+
 ### Bluesky app-password format and search host
 
 `BSKY_APP_PASSWORD` should be a 19-char app password in `xxxx-xxxx-xxxx-xxxx` format (lowercase alphanumeric, three hyphens). Generate one at <https://bsky.app/settings/app-passwords>. The AT Protocol's `createSession` endpoint also accepts your main account login password, but that's bad hygiene — main passwords have no scope (an app password can be limited to non-DM access) and can't be revoked individually.
