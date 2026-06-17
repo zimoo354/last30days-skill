@@ -110,15 +110,36 @@ PY
 )
 fi
 
+# Detect capability that doesn't need a config file: yt-dlp on PATH.
+# Done before the new-user early-exit so first-run users with yt-dlp
+# installed see YouTube is already available. See #394.
+HAS_YTDLP=""
+if command -v yt-dlp &>/dev/null; then
+  HAS_YTDLP="yes"
+fi
+
 # If setup has never been run, show welcome message for new users
 if [[ -z "$SETUP_COMPLETE" && -z "$CONFIG_FILE" && -z "${OPENAI_API_KEY:-}" && -z "${SCRAPECREATORS_API_KEY:-}" && -z "${AUTH_TOKEN:-}" && -z "${XAI_API_KEY:-}" ]]; then
-  cat <<'EOF'
+  if [[ -n "$HAS_YTDLP" ]]; then
+    # YouTube is already working via the on-system yt-dlp binary — don't list
+    # it as something the wizard needs to unlock. See #394.
+    cat <<'EOF'
+/last30days: Ready to use. Run /last30days to get started — setup takes 30 seconds.
+  Research any topic across Reddit, HN, X, YouTube, Polymarket (last 30 days).
+
+Reddit, Hacker News, Polymarket, and YouTube (yt-dlp detected) work out of the box.
+The setup wizard can unlock X/Twitter and more.
+  Detected: yt-dlp is installed (YouTube transcripts ready, no setup needed).
+EOF
+  else
+    cat <<'EOF'
 /last30days: Ready to use. Run /last30days to get started — setup takes 30 seconds.
   Research any topic across Reddit, HN, X, YouTube, Polymarket (last 30 days).
 
 Reddit, Hacker News, and Polymarket work out of the box.
 The setup wizard can unlock X/Twitter, YouTube, and more.
 EOF
+  fi
   if [[ -n "$LAST_RUN_LINE" ]]; then
     echo "$LAST_RUN_LINE"
   fi
@@ -132,10 +153,6 @@ if [[ -n "${ENV_AUTH_TOKEN:-${AUTH_TOKEN:-}}" && -n "${ENV_CT0:-${CT0:-}}" ]]; t
   HAS_X="yes"
 fi
 HAS_XAI="${ENV_XAI_API_KEY:-${XAI_API_KEY:-}}"
-HAS_YTDLP=""
-if command -v yt-dlp &>/dev/null; then
-  HAS_YTDLP="yes"
-fi
 HAS_BSKY="${ENV_BSKY_HANDLE:-${BSKY_HANDLE:-}}"
 HAS_EXA="${ENV_EXA_API_KEY:-${EXA_API_KEY:-}}"
 
