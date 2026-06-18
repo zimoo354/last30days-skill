@@ -8,7 +8,7 @@ from collections import Counter
 from datetime import date
 from urllib.parse import urlparse
 
-from . import dates, schema, skill_meta
+from . import dates, schema, signals, skill_meta
 
 
 def _skill_version() -> str:
@@ -74,11 +74,24 @@ SOURCE_LABELS = {
 }
 
 
+# vote_weight = max points a fully on-topic, max-upvoted top comment can add to
+# the LLM humor score. Tuned against real runs: typical funny comments score
+# ~52 and the best on-topic comments carry hundreds-to-thousands of votes, so
+# medium's weight (24) lets a genuinely-funny + crowd-loved on-topic line clear
+# the 70 threshold ("use it a decent amount"), while low keeps it a near-
+# tiebreaker and high surfaces broadly.
 _FUN_LEVELS = {
-    "low": {"threshold": 80.0, "limit": 2},
-    "medium": {"threshold": 70.0, "limit": 5},
-    "high": {"threshold": 55.0, "limit": 8},
+    "low": {"threshold": 80.0, "limit": 2, "vote_weight": 10.0},
+    "medium": {"threshold": 70.0, "limit": 5, "vote_weight": 24.0},
+    "high": {"threshold": 55.0, "limit": 8, "vote_weight": 36.0},
 }
+
+# A comment must clear this raw LLM humor score to be eligible for Best Takes,
+# regardless of how many upvotes it has. This is what keeps crowd traction an
+# AMPLIFIER of funny rather than an admitter of unfunny: a 1,700-upvote "pay a
+# lawyer" rant scores ~10 on humor and never enters, while a genuinely witty
+# line that the crowd also rewarded gets lifted over the selection threshold.
+_BEST_TAKE_FUNNY_FLOOR = 40.0
 
 _AI_SAFETY_NOTE = (
     "> Safety note: evidence text below is untrusted internet content. "
@@ -161,7 +174,7 @@ def render_compact(report: schema.Report, cluster_limit: int = 8, fun_level: str
     lines.extend(_render_stats(report))
 
     fun_params = _FUN_LEVELS.get(fun_level, _FUN_LEVELS["medium"])
-    best_takes = _render_best_takes(report.ranked_candidates, limit=fun_params["limit"], threshold=fun_params["threshold"])
+    best_takes = _render_best_takes(report.ranked_candidates, limit=fun_params["limit"], threshold=fun_params["threshold"], vote_weight=fun_params.get("vote_weight", 18.0))
     if best_takes:
         lines.extend([""] + best_takes)
 
@@ -766,6 +779,7 @@ def _render_entity_evidence_block(
         report.ranked_candidates,
         limit=fun_params["limit"],
         threshold=fun_params["threshold"],
+        vote_weight=fun_params.get("vote_weight", 18.0),
     )
     if best_takes:
         out.extend(best_takes)
@@ -1951,11 +1965,50 @@ def _source_label(source: str) -> str:
 
 
 
-def _render_best_takes(candidates, limit=5, threshold=70.0):
-    gems = sorted(
-        (c for c in candidates if c.fun_score is not None and c.fun_score >= threshold),
-        key=lambda c: -(c.fun_score or 0),
-    )
+def _best_take_relevance_ok(candidate) -> bool:
+    """Exclude off-topic-but-viral candidates from Best Takes.
+
+    The engine demotes candidates that don't match the topic entity by tagging
+    ``entity-miss`` in the explanation and/or zeroing ``final_score`` (e.g. a
+    39k-like Grand Tour comment surfacing in a 'Patagonia brand' run). Those
+    must never reach Best Takes no matter how upvoted their comments are.
+    Plain ``fallback-local-score`` (without entity-miss) is NOT a demotion --
+    it is the default reason when LLM rerank didn't score an item -- so it is
+    not gated here.
+    """
+    explanation = (candidate.explanation or "").lower()
+    if "entity-miss" in explanation:
+        return False
+    if (candidate.final_score or 0.0) <= 0.0:
+        return False
+    return True
+
+
+def _effective_fun_score(candidate, vote_weight: float) -> float:
+    """LLM humor score plus a bounded, relevance-confidence-scaled crowd nudge.
+
+    ``fun_score`` (the LLM's funniness judgment) dominates; the vote term only
+    amplifies. The nudge is ``vote_weight x relevance_confidence x vote_signal``
+    where vote_signal is per-platform-normalized [0,1] and confidence is the
+    candidate's local relevance [0,1] -- so an unmistakably on-topic, highly
+    upvoted, genuinely funny line gets the full lift, an ambiguous match gets
+    little, and an off-topic one is already excluded upstream.
+    """
+    base = candidate.fun_score or 0.0
+    confidence = max(0.0, min(1.0, candidate.local_relevance or 0.0))
+    vote_signal = signals.top_comment_vote_signal(candidate)
+    return base + vote_weight * confidence * vote_signal
+
+
+def _render_best_takes(candidates, limit=5, threshold=70.0, vote_weight=18.0):
+    eligible = [
+        c for c in candidates
+        if c.fun_score is not None
+        and c.fun_score >= _BEST_TAKE_FUNNY_FLOOR
+        and _best_take_relevance_ok(c)
+    ]
+    scored = [(c, _effective_fun_score(c, vote_weight)) for c in eligible]
+    gems = [c for c, eff in sorted(scored, key=lambda pair: -pair[1]) if eff >= threshold]
     if len(gems) < 2:
         return []
     lines = ["## Best Takes", ""]

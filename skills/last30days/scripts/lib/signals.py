@@ -96,6 +96,45 @@ def _top_comment_score(item: schema.SourceItem) -> float:
     return log1p_safe(comments[0].get("score"))
 
 
+# Per-platform log-reference for normalizing a top comment's vote count into a
+# [0,1] signal. Reddit upvotes run in the hundreds-to-thousands; YouTube/TikTok
+# likes run 10-600x higher (and the top end is display-abbreviated: "39K" is
+# stored as 39000). A raw or single-scale log compare would let YouTube/TikTok
+# dominate purely by platform scale, not by being funnier. Each value is the
+# log1p of a "very high" top-comment count for that platform, so dividing a
+# comment's log1p(score) by it yields a comparable cross-platform strength.
+_VOTE_LOG_REFERENCE: dict[str, float] = {
+    "reddit":     7.6,   # ~log1p(2000)
+    "hackernews": 6.2,   # ~log1p(500)
+    "youtube":    10.3,  # ~log1p(30000)
+    "tiktok":     10.3,  # ~log1p(30000)
+    "instagram":  9.2,   # ~log1p(10000)
+    "x":          9.2,   # ~log1p(10000)
+}
+_VOTE_LOG_REFERENCE_DEFAULT = 7.6
+
+
+def top_comment_vote_signal(candidate: schema.Candidate) -> float:
+    """Strength of a candidate's most-upvoted top comment, as [0,1].
+
+    Normalized *within the candidate's platform* (see ``_VOTE_LOG_REFERENCE``)
+    so a 22k-like TikTok comment and a 600-upvote Reddit comment land on a
+    comparable scale rather than letting raw counts dominate. Returns 0.0 when
+    no top comment carries votes. Used by the fun judge to amplify (never
+    drive) crowd-certified comments.
+    """
+    best_log = 0.0
+    for item in candidate.source_items:
+        comments = item.metadata.get("top_comments") or []
+        for comment in comments[:3]:
+            if isinstance(comment, dict):
+                best_log = max(best_log, log1p_safe(comment.get("score")))
+    if best_log <= 0.0:
+        return 0.0
+    ref = _VOTE_LOG_REFERENCE.get(candidate.source, _VOTE_LOG_REFERENCE_DEFAULT)
+    return max(0.0, min(1.0, best_log / ref))
+
+
 # Per-source engagement weights: list of (field_name, weight) tuples.
 # Reddit, YouTube, and TikTok use custom functions because they include
 # a dedicated 10% top-comment-score slot (see _reddit_engagement,
