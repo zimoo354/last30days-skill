@@ -68,7 +68,8 @@ The project-scoped file is the cleanest pattern for **per-client setups**: drop 
 | Hacker News | none | always on | yes |
 | Polymarket | none | always on | yes |
 | GitHub | `gh` CLI installed (uses your GitHub auth) | always on if `gh` present | yes |
-| YouTube | `yt-dlp` CLI installed | always on if `yt-dlp` present | yes |
+| YouTube | `yt-dlp` CLI installed; `SCRAPECREATORS_API_KEY` adds a server-side transcript fallback used only when yt-dlp fails (429 / bot-gate) | always on if `yt-dlp` present; SC transcript fallback default-on when key set (no credit spent unless yt-dlp fails) | yes |
+| YouTube comments | `SCRAPECREATORS_API_KEY` (default-on; suppress via `EXCLUDE_SOURCES=youtube_comments`) | top comments on the top ~3 videos by engagement | ~3 calls/run; 10K free calls |
 | Digg | `digg-pp-cli` on PATH (auto-installed during first-run setup via `npx -y @mvanhorn/printing-press-library@0.1.16 install digg --cli-only`; binary defaults to `$HOME/.local/bin` — Hermes/OpenClaw agent subprocesses must inherit that dir on PATH for Digg to activate; prior pp-digg installs use the same path) | always on if `digg-pp-cli` on PATH | yes (free, keyless, read-only) |
 | X / Twitter | one of: `AUTH_TOKEN` + `CT0` (browser cookies, Bird CLI), `XAI_API_KEY`, `XQUIK_API_KEY`, `SCRAPECREATORS_API_KEY`, or `FROM_BROWSER` (cookie-jar auth) | X items in results | cookie-jar / Bird = free; Xquik / xAI / ScrapeCreators = key-based |
 | TikTok | `SCRAPECREATORS_API_KEY` + `INCLUDE_SOURCES` contains `tiktok` | TikTok items | 10K free calls |
@@ -78,7 +79,7 @@ The project-scoped file is the cleanest pattern for **per-client setups**: drop 
 | Bluesky | `BSKY_HANDLE` + `BSKY_APP_PASSWORD` | Bluesky items | yes (app password at bsky.app) |
 | TruthSocial | `TRUTHSOCIAL_TOKEN` | TruthSocial items | yes |
 | Web search | one of: `BRAVE_API_KEY`, `EXA_API_KEY`, `SERPER_API_KEY`, `PARALLEL_API_KEY` | `--auto-resolve` and Step 2 supplements | Brave has a free tier; native WebSearch on Claude Code / Codex / Gemini works as a fallback |
-| Perplexity Deep Research | `OPENROUTER_API_KEY` | `--deep-research` flag (~$0.90/query) | no |
+| Perplexity Sonar / Search API / Deep Research | `PERPLEXITY_API_KEY` (preferred) or `OPENROUTER_API_KEY` (Sonar fallback) | `INCLUDE_SOURCES=perplexity`; `--deep-research` flag (~$0.90/query) | no |
 | Caption-free transcription | `GROQ_API_KEY` (free tier, preferred) or `OPENAI_API_KEY` (paid backstop); requires `ffmpeg` | Whisper transcription for audio/video without captions (groundwork: module shipped, not yet auto-invoked by the engine) | Groq free tier is generous; needs ffmpeg installed |
 | Jobs / careers pages | none for public ATS pages; web backend improves fallback discovery | `--hiring-signals` and strong Hiring Signals in standard company reports | yes |
 | Apify (alternate scraper) | `APIFY_API_TOKEN` | fallback for Reddit/TikTok/Instagram when ScrapeCreators is exhausted | yes (limited) |
@@ -97,6 +98,11 @@ BRAVE_API_KEY=<your-brave-key>
 # Optional sources
 SCRAPECREATORS_API_KEY=<your-scrapecreators-key>
 INCLUDE_SOURCES=tiktok,instagram
+# Add perplexity to INCLUDE_SOURCES when you want the paid Perplexity source.
+# PERPLEXITY_API_KEY=<your-perplexity-key>
+# INCLUDE_SOURCES=tiktok,instagram,perplexity
+# LAST30DAYS_PERPLEXITY_MODE=sonar  # sonar | search | both
+# LAST30DAYS_PERPLEXITY_MODEL=sonar-pro  # sonar | sonar-pro | sonar-reasoning-pro
 
 # X authentication (one option only)
 AUTH_TOKEN=<your-auth-token>
@@ -120,6 +126,36 @@ BSKY_APP_PASSWORD=<your-app-password>
 After editing: `chmod 600 ~/.config/last30days/.env` (or `chmod 600 .claude/last30days.env` if using the project-scoped variant).
 
 **Troubleshooting:** if a source you expected to see isn't appearing in results, run `python3 scripts/last30days.py --diagnose`. It prints a per-source availability report (which keys were detected, which CLIs are installed, which backends are reachable) without running a full search.
+
+### Perplexity source modes
+
+Perplexity is a paid opt-in source. A direct `PERPLEXITY_API_KEY` unlocks first-party Perplexity features. `OPENROUTER_API_KEY` remains a Sonar compatibility fallback only; Perplexity Search API and async Deep Research call Perplexity directly.
+
+`LAST30DAYS_PERPLEXITY_MODE` controls normal `perplexity` source runs:
+
+| Value | Behavior | Calls |
+|---|---|---|
+| `sonar` (default) | Sonar synthesis plus citations. | one Sonar call |
+| `search` | Raw ranked Search API rows; best when you want source aggregation over prose. | one Search API call |
+| `both` | Sonar synthesis plus raw ranked Search API rows, deduped by URL. | one Search API call and one Sonar call |
+
+`--deep-research` ignores `LAST30DAYS_PERPLEXITY_MODE` and uses `sonar-deep-research`. With `PERPLEXITY_API_KEY`, it submits to Perplexity's async Sonar endpoint and polls with a hard wall-clock timeout. The async request uses a deterministic idempotency key derived from the request body. If the request is still running at timeout, fails remotely, or polling hits a transport/rate-limit error after the async id exists, the raw artifact records the async request id, idempotency key, last status, lifecycle timestamps returned by Perplexity, poll count, and timeout/error fields so you can inspect or resume by id outside the run. With only `OPENROUTER_API_KEY`, it keeps the OpenRouter synchronous fallback.
+
+Perplexity-specific env vars:
+
+| Env var | Default | Applies to | Notes |
+|---|---|---|---|
+| `LAST30DAYS_PERPLEXITY_MODE` | `sonar` | normal Perplexity source runs | `sonar`, `search`, or `both`; `search` and `both` require `PERPLEXITY_API_KEY`. |
+| `LAST30DAYS_PERPLEXITY_MODEL` | `sonar-pro` | direct Sonar only | Supported: `sonar`, `sonar-pro`, `sonar-reasoning-pro`. `--deep-research` forces `sonar-deep-research`. |
+| `LAST30DAYS_PERPLEXITY_MAX_RESULTS` | `10` | Search API | Clamped to Perplexity's 1..20 range. |
+| `LAST30DAYS_PERPLEXITY_SEARCH_CONTEXT_SIZE` | provider default | Search API | `low`, `medium`, or `high`; omitted unless set. |
+| `LAST30DAYS_PERPLEXITY_SEARCH_MODE` | provider default | direct Sonar | `web`, `academic`, or `sec`. |
+| `LAST30DAYS_PERPLEXITY_DOMAIN_FILTER` | unset | Search API and direct Sonar | Comma-separated domains, max 20. |
+| `LAST30DAYS_PERPLEXITY_LANGUAGE_FILTER` | unset | Search API and direct Sonar | Comma-separated ISO 639-1 language codes, max 20. |
+| `LAST30DAYS_PERPLEXITY_COUNTRY` | unset | Search API | Two-letter country code such as `US`. |
+| `LAST30DAYS_PERPLEXITY_RECENCY_FILTER` | unset | Search API and direct Sonar | `hour`, `day`, `week`, `month`, or `year`. |
+| `LAST30DAYS_PERPLEXITY_REASONING_EFFORT` | unset | direct Sonar | `minimal`, `low`, `medium`, or `high`. |
+| `LAST30DAYS_PERPLEXITY_DEEP_TIMEOUT_SECONDS` | `600` | direct async Deep Research | Wall-clock polling deadline. |
 
 ### Encrypted credential sources (Keychain / pass)
 
@@ -185,7 +221,7 @@ Accepts the same comma-separated names and aliases as `--search` (`web` → grou
 1. **Gemini** - `GOOGLE_API_KEY` / `GEMINI_API_KEY` / `GOOGLE_GENAI_API_KEY`
 2. **OpenAI** - `OPENAI_API_KEY` (or Codex auth at `~/.codex/auth.json`)
 3. **xAI** - `XAI_API_KEY`
-4. **OpenRouter** - `OPENROUTER_API_KEY` (also unlocks `--deep-research`)
+4. **OpenRouter** - `OPENROUTER_API_KEY` (Sonar fallback for the Perplexity source / `--deep-research`; also usable as a reasoning provider)
 5. **Local / deterministic** - always available, lowest quality
 
 When you invoke `/last30days` from Claude Code, Codex, or Gemini, the host model **is** the reasoning provider for plan + synthesis - you don't need any of the keys above unless you also run the script headlessly (cron, CI, watchlist).

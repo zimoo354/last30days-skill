@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.7.1] - 2026-06-21
+
+### Fixed
+
+- GitHub repo stars are no longer mislabeled as "reactions" in the report footer. Repo cards use a distinct `stars` engagement key, velocity cards use `merged_prs`, and genuine issue/PR reaction counts keep their own `reactions` key. (#645, closes #642)
+- Hacker News returned zero stories on every run: the Algolia query sent `points>2`, which the HN index no longer accepts as a filterable attribute, so every request 400'd. Dropped the server-side `points` filter; low-engagement demotion still happens at parse time. (#639)
+- Polymarket surfaced off-topic markets and rendered a mangled footer. The relevance filter was fed the per-subquery string instead of the stable topic, and market labels were truncated mid-article into fragments like "an Anthropic Claude model score at: an 19%". Now filters on the stable topic and cleans the labels. (#640)
+
+## [3.7.0] - 2026-06-20
+
+### Added
+
+- **Direct Perplexity API support.** When `PERPLEXITY_API_KEY` is set it is preferred over OpenRouter for the Perplexity source, unlocking first-party Search API results and async Deep Research. Adds `LAST30DAYS_PERPLEXITY_MODE=sonar|search|both` plus model, search-context, domain/language/country, recency, and reasoning-effort knobs. OpenRouter stays the Sonar compatibility fallback when no direct key is set. Async Deep Research preserves request id, status, idempotency key, poll count, lifecycle timestamps, and failure metadata in raw artifacts. (#629, by @sk-holmes)
+
+### Changed
+
+- `check-config.sh` now parses env files in pure bash (no `sed` / `tr`), which also fixes the YouTube-availability hint breaking in minimal environments that lack those tools. (#629)
+
+## [3.6.1] - 2026-06-20
+
+### Added
+
+- **ScrapeCreators transcript fallback.** When `SCRAPECREATORS_API_KEY` is set, YouTube transcripts fall back to the ScrapeCreators transcript endpoint after the keyless yt-dlp cascade fails (fetched server-side, so no 429 / cookies / PO tokens). yt-dlp stays primary and a credit is only spent on a genuine failure, never on success and never on a video proven to have no captions. With a key, yt-dlp also fails over fast (one short-timeout attempt) so a 429 hands off to ScrapeCreators in roughly 17s instead of roughly 90s. (#637, idea from #595)
+- **YouTube comments default-on.** Comment enrichment now activates whenever a ScrapeCreators key is present (bounded to the top ~3 videos by engagement, ~3 credits per run) instead of requiring `INCLUDE_SOURCES=youtube_comments`. Suppress with `EXCLUDE_SOURCES=youtube_comments`. TikTok/Instagram comments remain `INCLUDE_SOURCES` opt-ins. (#637)
+
+### Fixed
+
+- **Salvage partial YouTube transcripts on non-zero yt-dlp exit.** With the default `en,es,pt` languages an English video wrote `en.vtt` then 429'd on `es`/`pt`, and the already-written transcript was discarded and retried back into the rate limit. Any VTT on disk is now read before the failure is classified, which fixes the dominant `0/N transcripts` case. (#636)
+- **Windows transcript crash on subprocess timeout.** Guarded the SIGKILL escalation path in `run_with_timeout` against `os.killpg` / `os.getpgid` raising `AttributeError` on Windows (they are POSIX-only), mirroring the primary path's guard. (#638, reported in #588)
+
 ## [3.6.0] - 2026-06-18
 
 ### Added
