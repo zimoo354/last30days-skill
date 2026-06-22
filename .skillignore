@@ -13,6 +13,8 @@ __pycache__/
 *.jpg
 *.png
 *.gif
+assets/
+skills/last30days/assets/
 .DS_Store
 .coverage
 htmlcov/
@@ -55,6 +57,11 @@ TASKS.md
 skills/last30days/scripts/build-skill.sh
 skills/last30days/scripts/compare.sh
 skills/last30days/scripts/evaluate_search_quality.py
+skills/last30days/scripts/setup-keychain.sh
+skills/last30days/scripts/setup-pass.sh
 skills/last30days/scripts/test_device_auth.py
 skills/last30days/scripts/test-v1-vs-v2.sh
 skills/last30days/scripts/verify_v3.py
+
+# Keep visible: optional runtime watchlist/store/briefing feature scripts
+# (`watchlist.py`, `store.py`, and `briefing.py`).
