@@ -41,7 +41,7 @@ jobs:
           persist-credentials: false
 
       - name: Review dependency changes
-        uses: actions/dependency-review-action@5a2ce3f5b92ee19cbb1543509997d355b8e2a78b # v4.5.6
+        uses: actions/dependency-review-action@3b139cfc5fae8b618d3eae3675e383bb1769c019 # v4.5.0
 
   secret-scan:
     name: Secret scan
