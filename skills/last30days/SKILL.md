@@ -706,6 +706,7 @@ Before running the engine, determine which flags apply to this topic and resolve
 | `--x-related={h1,h2,...}` | Step 0.5 (Section A below) | Topic has associated entities (founders, commentators, spouse, collaborators, media handles) |
 | `--github-user={user}` | Step 0.5b | Topic is a person who ships code (developer, engineer, CEO-who-codes, researcher) |
 | `--github-repo={owner/repo}` | Step 0.5c | Topic is a product / project / open-source tool |
+| `--trustpilot-domain={domain}` | Step 0.5d | Topic is a company / brand / service with a Trustpilot presence AND the run includes the Trustpilot source |
 | `--subreddits={sub1,sub2,...}` | Step 0.55 | Always — almost every topic has active Reddit communities |
 | `--tiktok-hashtags={h1,h2,...}` | Step 0.55 | Always — inferred from topic |
 | `--tiktok-creators={c1,c2,...}` | Step 0.55 | Creator / influencer / brand topics |
@@ -840,6 +841,28 @@ Project-mode GitHub fetches live star counts, README snippets, latest releases, 
 
 Store: `RESOLVED_GITHUB_REPOS = {comma-separated owner/repo or empty}`
 
+### Step 0.5d: Resolve Trustpilot Domain (if topic is a company/brand and Trustpilot is active)
+
+If the run includes the Trustpilot source (`INCLUDE_SOURCES=trustpilot` or an explicit `--search` list) and TOPIC is a company, brand, or service, resolve its Trustpilot review-page domain. Trustpilot pages are keyed by domain (`www.thriftbooks.com`), not company name — a bare name 404s.
+
+**You usually already have it.** Step 0.55 item 6 (first-party positioning) fetches the official site — capture the bare hostname while you're there. When positioning wasn't fetched, one lookup covers it:
+
+```
+WebSearch("{TOPIC} official site")
+```
+
+Pass to the CLI: `--trustpilot-domain={domain}` (e.g., `--trustpilot-domain=www.thriftbooks.com`)
+
+The flag is used verbatim and bypasses the engine's brand-shape gate, so it also unlocks Trustpilot for multi-word company names ("Stanley Steemer carpet cleaning"). For comparisons, put a per-entity `trustpilot_domain` in each entity's `--competitors-plan` entry instead.
+
+**A miss is not fatal.** When the flag is absent, the engine resolves name → domain itself via the CLI's search (and headless `--auto-resolve` runs fill a hint the engine verifies). Resolve the flag when the domain is already in hand or the company name is ambiguous (lookalike or same-named companies) — an explicit domain is the only way to guarantee the right company.
+
+**Skip this step if:**
+- The Trustpilot source is not active for this run
+- TOPIC is a person, event, or abstract concept (no company reviews to fetch)
+
+Store: `RESOLVED_TRUSTPILOT_DOMAIN = {domain or empty}`
+
 ---
 
 ## Agent Mode (--agent flag)
@@ -959,7 +982,7 @@ Topic A (the main topic, first in the vs-string) uses outer `--x-handle`, `--x-r
 - `--competitors` (bare) - signals the hosting model to discover 2 peers (3-way total).
 - `--competitors=N` - N peers (1..6; out-of-range clamps with stderr warning).
 - `--competitors-list="A,B,C"` - minimum escape hatch; names only, no per-entity targeting. Peer sub-runs fall back to planner defaults (visibly thinner data).
-- `--competitors-plan '{entity: {x_handle, subreddits, github_user, github_repos, context}}'` - full per-entity targeting; implies vs-mode; preferred.
+- `--competitors-plan '{entity: {x_handle, subreddits, github_user, github_repos, trustpilot_domain, context}}'` - full per-entity targeting; implies vs-mode; preferred.
 - `--polymarket-keywords "kw1,kw2"` - disambiguate Polymarket for ambiguous single-token topics ("Warriors" → `nba,gsw,golden-state`).
 - `--hiring-signals` - deep-dive into public jobs/careers evidence for company focus signals. Use signal language only: leaning into, investing in, increasing focus, priority shift. Do NOT claim exact roadmap predictions from job postings.
 
@@ -1122,10 +1145,11 @@ Resolved:
 - Reddit: r/{sub1}, r/{sub2}, r/{sub3}, r/{peer1}, r/{peer2} (+ {category_id} peers)
 - TikTok: #{hashtag1}, #{hashtag2}
 - YouTube: {query1}, {query2}
+- Trustpilot: {domain}
 - Positioning: "{one-line stated value prop}" (first-party)
 ```
 
-Only show lines for platforms where something was resolved. Skip empty lines. On the Reddit line, the trailing `(+ {category_id} peers)` annotation appears when Step 0.55 Section 2a added category-peer subs. Omit the annotation when the topic had no matching category. The `Positioning:` line appears for company / product / service topics (from Step 0.55 item 6); omit it for people, events, abstract concepts, and ownerless topics. This display replaces the old "Parsed intent" block with something more useful.
+Only show lines for platforms where something was resolved. Skip empty lines. On the Reddit line, the trailing `(+ {category_id} peers)` annotation appears when Step 0.55 Section 2a added category-peer subs. Omit the annotation when the topic had no matching category. The `Positioning:` line appears for company / product / service topics (from Step 0.55 item 6); omit it for people, events, abstract concepts, and ownerless topics. The `Trustpilot:` line appears only when Step 0.5d resolved a domain (company/brand topic with the Trustpilot source active). This display replaces the old "Parsed intent" block with something more useful.
 
 ---
 
