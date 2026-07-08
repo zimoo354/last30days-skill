@@ -1,7 +1,7 @@
 # /last30days
 
 <p align="center">
-  <img src="media/pr-assets/last30days-ad.gif" width="820" alt="last30days — an AI agent-led search engine that searches people, not editors" />
+  <img src="media/pr-assets/last30days-ad.gif" width="720" alt="last30days - an AI agent-led search engine that searches people, not editors" />
 </p>
 
 <p align="center">
