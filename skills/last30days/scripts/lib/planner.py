@@ -85,11 +85,11 @@ SOURCE_PRIORITY = {
     "factual": ["hackernews", "reddit", "x", "youtube"],
     "product": ["jobs", "youtube", "reddit", "x", "tiktok", "hackernews"],
     "concept": ["hackernews", "reddit", "x", "youtube"],
-    "opinion": ["reddit", "x", "stocktwits", "youtube", "hackernews"],
+    "opinion": ["reddit", "x", "stocktwits", "dripstack", "youtube", "hackernews"],
     "how_to": ["youtube", "reddit", "x", "hackernews"],
     "comparison": ["reddit", "x", "hackernews", "youtube"],
     "breaking_news": ["x", "stocktwits", "reddit", "hackernews", "youtube", "polymarket"],
-    "prediction": ["polymarket", "stocktwits", "x", "hackernews", "reddit", "youtube"],
+    "prediction": ["polymarket", "stocktwits", "dripstack", "x", "hackernews", "reddit", "youtube"],
 }
 SOURCE_LIMITS = {
     "quick": {
@@ -122,6 +122,7 @@ SOURCE_CAPABILITIES = {
     "truthsocial": {"discussion", "social"},
     "polymarket": {"market"},
     "stocktwits": {"social", "market", "finance_social"},
+    "dripstack": {"reference", "analysis", "link"},
     "digg": {"discussion", "social", "link"},
     "arxiv": {"reference", "analysis", "link"},
     "techmeme": {"discussion", "link", "reference"},

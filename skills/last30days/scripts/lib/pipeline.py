@@ -23,6 +23,7 @@ from . import (
     dates,
     dedupe,
     digg,
+    dripstack,
     entity_extract,
     env,
     github,
@@ -127,6 +128,7 @@ MOCK_AVAILABLE_SOURCES = [
     "jobs",
     "linkedin",
     "corpus",
+    "dripstack",
 ]
 
 
@@ -186,6 +188,10 @@ def available_sources(
     # GitHub is reachable via the unauthenticated REST tier too, so it is
     # available even without a token/gh CLI (a token only raises rate limits).
     available.append("github")
+    # DripStack search is free and public (no API key). The planner will only
+    # assign it to financial/analysis topics — off-topic searches return thin
+    # results that the engine's relevance gating handles naturally.
+    available.append("dripstack")
     if which("digg-pp-cli"):
         available.append("digg")
     # arXiv is default-on when its Printing Press CLI is installed (zero auth).
@@ -2814,6 +2820,14 @@ def _retrieve_stream_impl(
             stocktwits.parse_stocktwits_response(result, query=subquery.search_query),
             _result_outcome_artifact(source, result),
         )
+    if source == "dripstack":
+        result = dripstack.search_dripstack(
+            subquery.search_query, from_date, to_date, depth=depth)
+        relevance_topic = raw_topic or topic or subquery.search_query
+        return (
+            dripstack.parse_dripstack_response(result, query=relevance_topic),
+            _result_outcome_artifact(source, result),
+        )
     if source == "digg":
         result = digg.search_digg(subquery.search_query, from_date, to_date, depth=depth)
         items = digg.parse_digg_response(result, query=subquery.search_query)
@@ -3016,6 +3030,25 @@ def _mock_stream_results(source: str, subquery: schema.SubQuery) -> tuple[list[d
                 "engagement": {},
                 "relevance": 0.83,
                 "why_relevant": "Mock Techmeme headline",
+            },
+        ],
+        "dripstack": [
+            {
+                "id": "DS1",
+                "title": f"Deep dive: {subquery.search_query} from a paid newsletter",
+                "url": "https://newsletter.example.com/deep-dive",
+                "author": "newsletter.example.com",
+                "date": dates.get_date_range(3)[0],
+                "engagement": {},
+                "relevance": 0.85,
+                "why_relevant": "Mock DripStack newsletter result",
+                "snippet": f"Professional analyst coverage of {subquery.search_query}.",
+                "metadata": {
+                    "publication_slug": "newsletter.example.com",
+                    "post_slug": "deep-dive",
+                    "relevance_score": 85,
+                    "match_confidence": "strong",
+                },
             },
         ],
         "trustpilot": [
