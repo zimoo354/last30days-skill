@@ -356,6 +356,12 @@ Published a recurring AI update, market watch, or wonderfully narrow obsession w
 
 > "5 of the 10 trending repos on GitHub today are Claude tools. #1: mvanhorn/last30days-skill" -@yieldhunter95
 
+## Related skills
+
+| Skill | What it does | Install |
+|-------|-------------|--------|
+| **[DripStack](https://dripstack.xyz)** | Search, browse, and purchase premium financial newsletters and podcasts via micropayments. Stock picks, analyst calls, and paid Substack content. | `npx skills add dripstack/dripstack-skill -g` |
+
 ## Open source
 
 MIT license. No tracking. No analytics. Your research stays on your machine. 2,700+ tests.
