@@ -291,6 +291,7 @@ These platforms don't have relationships with each other. X doesn't know what Re
 | Bluesky | App password from bsky.app | Free |
 | TikTok + Instagram + Threads + Pinterest + LinkedIn + YouTube comments | ScrapeCreators key | 10,000 free calls, then PAYG |
 | Xiaohongshu (RED) | Run a logged-in x-mcp browser plugin or `xiaohongshu-mcp` service and request it with `--search xhs`; last30days auto-probes `http://localhost:18060` then `http://host.docker.internal:18060`, or use `XIAOHONGSHU_API_BASE` for a custom URL | No last30days API key; depends on your local browser-session service |
+| DripStack (premium financial newsletters) | Requested-only: include it with `--search dripstack` | No key; free public search API |
 | Perplexity Sonar / Search API / Deep Research | Perplexity key, or OpenRouter key as Sonar fallback | Pay as you go |
 | Web search | Brave Search key | 2,000 free queries/month |
 
@@ -355,12 +356,6 @@ Published a recurring AI update, market watch, or wonderfully narrow obsession w
 > "This one skill replaced my entire research workflow. You give it a topic, it scrapes Reddit, X, and the web for what people are actually talking about. Not old blog posts. Real conversations from the last 30 days." -@itswilsoncharles
 
 > "5 of the 10 trending repos on GitHub today are Claude tools. #1: mvanhorn/last30days-skill" -@yieldhunter95
-
-## Related skills
-
-| Skill | What it does | Install |
-|-------|-------------|--------|
-| **[DripStack](https://dripstack.xyz)** | Search, browse, and purchase premium financial newsletters and podcasts via micropayments. Stock picks, analyst calls, and paid Substack content. | `npx skills add dripstack/dripstack-skill -g` |
 
 ## Open source
 

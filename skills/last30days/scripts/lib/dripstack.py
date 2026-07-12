@@ -28,8 +28,9 @@ import json
 import re
 import sys
 import urllib.parse
-import urllib.request
 from typing import Any
+
+from . import http
 
 _BASE_URL = "https://dripstack.xyz"
 _SEARCH_URL = f"{_BASE_URL}/api/v1/search"
@@ -48,9 +49,9 @@ def _log(msg: str) -> None:
 
 
 def _get_json(url: str, timeout: int = 20) -> dict[str, Any]:
-    req = urllib.request.Request(url, headers={"User-Agent": _UA})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.load(resp)
+    # All engine traffic goes through the shared lib/http.py choke point so
+    # capture/replay, fixtures, and failure taxonomy apply to this source too.
+    return http.get(url, headers={"User-Agent": _UA}, timeout=timeout, retries=2)
 
 
 def search_dripstack(
@@ -85,6 +86,21 @@ def search_dripstack(
         return []
 
     items = data.get("items") or []
+    if from_date or to_date:
+        windowed = []
+        dropped = 0
+        for item in items:
+            published = str(item.get("publishedAt") or "")[:10]
+            if published and from_date and published < from_date:
+                dropped += 1
+                continue
+            if published and to_date and published > to_date:
+                dropped += 1
+                continue
+            windowed.append(item)
+        if dropped:
+            _log(f"dropped {dropped} result(s) outside the {from_date}..{to_date} window")
+        items = windowed
     _log(f"search '{topic}': {len(items)} results (confidence: {data.get('matchConfidence', '?')})")
     return items
 

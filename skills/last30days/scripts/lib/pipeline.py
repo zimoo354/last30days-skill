@@ -188,10 +188,12 @@ def available_sources(
     # GitHub is reachable via the unauthenticated REST tier too, so it is
     # available even without a token/gh CLI (a token only raises rate limits).
     available.append("github")
-    # DripStack search is free and public (no API key). The planner will only
-    # assign it to financial/analysis topics — off-topic searches return thin
-    # results that the engine's relevance gating handles naturally.
-    available.append("dripstack")
+    # DripStack is requested-only (owner decision, #791): a commercial
+    # third-party API must never receive default-run traffic. Request it per
+    # run (--search dripstack) or via LAST30DAYS_DEFAULT_SEARCH; the search
+    # API is free and public (no key), so the request itself is the gate.
+    if requested_sources and "dripstack" in requested_sources:
+        available.append("dripstack")
     if which("digg-pp-cli"):
         available.append("digg")
     # arXiv is default-on when its Printing Press CLI is installed (zero auth).
