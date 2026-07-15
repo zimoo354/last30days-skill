@@ -590,6 +590,89 @@ _SOURCE_BUILDERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
 
 
 # ---------------------------------------------------------------------------
+# Run-evidence overlay (U1): read the engine's last-report.json
+#
+# doctor predicts config health; a research run records what ACTUALLY happened
+# per source in Report.source_status. Reading the last run lets doctor tell
+# "configured" from "working" (the four-state audit) and powers --postmortem.
+# This is a read-only reuse of the engine's existing report cache - no new
+# writer. The schema stamp + filename mirror REPORT_CACHE_VERSION /
+# _last_report_cache_path() in last30days.py (the same mirror pattern the
+# doctor-cache block below already uses for its own schema stamp).
+# ---------------------------------------------------------------------------
+
+REPORT_CACHE_SCHEMA_VERSION = "last30days-report-cache/v1"
+REPORT_CACHE_FILENAME = "last-report.json"
+DEFAULT_REPORT_CACHE_TTL_SECONDS = 3600
+
+
+def _last_report_path() -> Optional[Path]:
+    """The engine's last-report.json, beside the doctor cache (None in clean mode)."""
+    if env.CONFIG_DIR is None:
+        return None
+    return env.CONFIG_DIR / REPORT_CACHE_FILENAME
+
+
+def load_run_evidence(
+    config: Dict[str, Any], ttl_seconds: int = DEFAULT_REPORT_CACHE_TTL_SECONDS
+) -> Dict[str, Any]:
+    """Return the last research run's per-source outcomes, read-only.
+
+    Shape: ``{"outcomes": {source: {state, items_returned, detail, fix_hint,
+    at}}, "topic": str|None, "at": str|None, "fresh": bool, "present": bool}``.
+
+    Any failure mode - absent file, unreadable, invalid JSON, schema mismatch,
+    wrong shape - yields the empty, not-present result and never raises
+    (doctor's exit-0 contract is absolute). ``fresh`` reflects the report TTL:
+    ``--postmortem`` reads regardless of freshness (labeling the age), while the
+    plain-``doctor`` overlay consumes only fresh evidence so a week-old run
+    cannot mislabel a source as WORKING today.
+    """
+    empty = {"outcomes": {}, "topic": None, "at": None, "fresh": False, "present": False}
+    path = _last_report_path()
+    if path is None or not path.exists():
+        return empty
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return empty
+    if not isinstance(payload, dict):
+        return empty
+    if payload.get("schema") != REPORT_CACHE_SCHEMA_VERSION:
+        return empty
+    reports = payload.get("reports") or []
+    if not reports or not isinstance(reports[0], dict):
+        return empty
+    report = reports[0].get("report")
+    if not isinstance(report, dict):
+        return empty
+    raw_status = report.get("source_status") or {}
+    outcomes: Dict[str, Any] = {}
+    if isinstance(raw_status, dict):
+        for source, outcome in raw_status.items():
+            if not isinstance(outcome, dict):
+                continue
+            state = outcome.get("state")
+            if not isinstance(state, str):
+                continue
+            outcomes[source] = {
+                "state": state,
+                "items_returned": int(outcome.get("items_returned") or 0),
+                "detail": outcome.get("detail"),
+                "fix_hint": outcome.get("fix_hint"),
+                "at": outcome.get("at"),
+            }
+    timestamp = payload.get("timestamp")
+    return {
+        "outcomes": outcomes,
+        "topic": payload.get("topic"),
+        "at": timestamp or report.get("generated_at"),
+        "fresh": bool(env.is_timestamp_fresh(timestamp, ttl_seconds)),
+        "present": True,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Aggregation
 # ---------------------------------------------------------------------------
 
@@ -654,6 +737,12 @@ def build_report(config: Dict[str, Any]) -> Dict[str, Any]:
             zip(SOURCE_ORDER, pool.map(_build_one, SOURCE_ORDER))
         )
 
+    # U1: overlay the last research run's per-source outcome onto each record
+    # so the audit layer can tell "configured" from "actually working".
+    evidence = load_run_evidence(config)
+    for source, record in sources.items():
+        record["run_outcome"] = evidence["outcomes"].get(source) if evidence["fresh"] else None
+
     # Sequential on purpose: the permission preflight composes pipeline
     # diagnostics and must not race the source builders.
     try:
@@ -670,6 +759,12 @@ def build_report(config: Dict[str, Any]) -> Dict[str, Any]:
         "setup": _setup_block(config),
         "permissions": permissions,
         "sources": sources,
+        "run_evidence": {
+            "present": evidence["present"],
+            "fresh": evidence["fresh"],
+            "topic": evidence["topic"],
+            "at": evidence["at"],
+        },
     }
 
 

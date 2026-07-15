@@ -15,12 +15,15 @@ Covers the plan's U4 scenarios:
      note, never a false-alarm error.
 """
 
+import datetime
 import io
 import json
 import os
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from unittest import mock
 
 import last30days as cli
@@ -111,6 +114,9 @@ class _Hermetic:
             # Hermetic library: never glob the user's real saved-research dir.
             # Tests that assert a specific brief count override this.
             mock.patch("lib.doctor._count_saved_briefs", return_value=0),
+            # Hermetic run-evidence: never read the user's real last-report.json.
+            # Tests that inject run evidence override this with a temp file.
+            mock.patch("lib.doctor._last_report_path", return_value=None),
             # FTS5 is present on CI/dev SQLite; pin it so the library record's
             # branch is deterministic regardless of the host's SQLite build.
             mock.patch("lib.library_index.fts5_available", return_value=True),
@@ -691,6 +697,99 @@ class TextReport(unittest.TestCase):
         report = _build({"BRAVE_API_KEY": "dummy-brave-secret-000"})
         text = doctor.render_text(report)
         self.assertIn("will use: brave", text)
+
+
+def _write_last_report(dir_path, *, source_status, topic="wordpress", fresh=True):
+    """Write a minimal last-report.json the run-evidence loader can read."""
+    ts = datetime.datetime.now(datetime.timezone.utc)
+    if not fresh:
+        ts = ts - datetime.timedelta(
+            seconds=doctor.DEFAULT_REPORT_CACHE_TTL_SECONDS + 600
+        )
+    iso = ts.isoformat()
+    payload = {
+        "schema": doctor.REPORT_CACHE_SCHEMA_VERSION,
+        "timestamp": iso,
+        "topic": topic,
+        "reports": [
+            {
+                "entity": "",
+                "report": {
+                    "generated_at": iso,
+                    "source_status": {
+                        src: {
+                            "source": src,
+                            "state": st.get("state"),
+                            "items_returned": st.get("items_returned", 0),
+                            "detail": st.get("detail"),
+                            "at": iso,
+                            "fix_hint": st.get("fix_hint"),
+                        }
+                        for src, st in source_status.items()
+                    },
+                },
+            }
+        ],
+    }
+    path = Path(dir_path) / doctor.REPORT_CACHE_FILENAME
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+class RunEvidenceOverlay(unittest.TestCase):
+    """U1: build_report overlays last-report.json per-source outcomes."""
+
+    def _build_with_evidence(self, source_status, fresh=True):
+        tmp = tempfile.mkdtemp()
+        path = _write_last_report(tmp, source_status=source_status, fresh=fresh)
+        with _Hermetic(), mock.patch(
+            "lib.doctor._last_report_path", return_value=path
+        ):
+            return doctor.build_report({})
+
+    def test_failed_source_outcome_overlaid(self):
+        report = self._build_with_evidence(
+            {
+                "youtube": {"state": "error", "items_returned": 0, "detail": "HTTP 500"},
+                "reddit": {"state": "ok", "items_returned": 13},
+            }
+        )
+        yt = report["sources"]["youtube"]["run_outcome"]
+        self.assertIsNotNone(yt)
+        self.assertEqual("error", yt["state"])
+        self.assertIn("HTTP 500", yt["detail"])
+        self.assertEqual(
+            13, report["sources"]["reddit"]["run_outcome"]["items_returned"]
+        )
+        self.assertTrue(report["run_evidence"]["fresh"])
+        self.assertTrue(report["run_evidence"]["present"])
+
+    def test_no_cache_yields_no_outcomes(self):
+        with _Hermetic():  # _last_report_path -> None
+            report = doctor.build_report({})
+        self.assertIsNone(report["sources"]["reddit"]["run_outcome"])
+        self.assertFalse(report["run_evidence"]["present"])
+
+    def test_corrupt_cache_treated_as_absent(self):
+        tmp = tempfile.mkdtemp()
+        path = Path(tmp) / doctor.REPORT_CACHE_FILENAME
+        path.write_text("{not valid json", encoding="utf-8")
+        with _Hermetic(), mock.patch(
+            "lib.doctor._last_report_path", return_value=path
+        ):
+            report = doctor.build_report({})
+        self.assertIsNone(report["sources"]["reddit"]["run_outcome"])
+        self.assertFalse(report["run_evidence"]["present"])
+
+    def test_stale_cache_present_but_not_overlaid(self):
+        report = self._build_with_evidence(
+            {"youtube": {"state": "error", "items_returned": 0}}, fresh=False
+        )
+        # Present but not fresh: overlay withheld from plain doctor (R4),
+        # while --postmortem (U4) can still read it by age.
+        self.assertIsNone(report["sources"]["youtube"]["run_outcome"])
+        self.assertTrue(report["run_evidence"]["present"])
+        self.assertFalse(report["run_evidence"]["fresh"])
 
 
 if __name__ == "__main__":
