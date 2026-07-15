@@ -1638,6 +1638,8 @@ SKILL_ONLY_FLAGS = {
 DOCTOR_PASSTHROUGH_FLAGS = {
     "--json",
     "--cached",
+    "--postmortem",
+    "--probe",
 }
 
 
@@ -2024,6 +2026,8 @@ def _main(
             config,
             emit_json=(args.emit == "json" or "--json" in extra_argv),
             cached="--cached" in extra_argv,
+            postmortem="--postmortem" in extra_argv,
+            probe="--probe" in extra_argv,
         )
 
     if topic.lower() == "library feed":
