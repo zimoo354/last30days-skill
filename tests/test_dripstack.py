@@ -27,7 +27,9 @@ def test_dripstack_absent_from_available_sources_by_default():
 
 
 def test_dripstack_available_only_when_explicitly_requested():
-    available = pipeline.available_sources({}, ["dripstack"], x_pending=False)
+    available = pipeline.available_sources(
+        {"DRIPSTACK_API_KEY": "pk_drip_test"}, ["dripstack"], x_pending=False,
+    )
     assert "dripstack" in available
 
 
@@ -37,14 +39,18 @@ def test_search_goes_through_the_shared_http_choke_point(monkeypatch):
     def fake_get(url, headers=None, **kwargs):
         seen["url"] = url
         seen["retries"] = kwargs.get("retries")
+        seen["headers"] = headers
         return {"items": [_api_item()], "matchConfidence": "strong"}
 
     monkeypatch.setattr(dripstack.http, "get", fake_get)
-    items = dripstack.search_dripstack("Nvidia earnings", "2026-06-12", "2026-07-12")
+    items = dripstack.search_dripstack(
+        "Nvidia earnings", "2026-06-12", "2026-07-12",
+        api_key="pk_drip_test123")
 
     assert len(items) == 1
     assert seen["url"].startswith("https://dripstack.xyz/api/v1/search?")
     assert seen["retries"] == 2
+    assert seen["headers"]["Authorization"] == "Bearer pk_drip_test123"
 
 
 def test_search_drops_results_outside_the_window(monkeypatch):
@@ -76,7 +82,7 @@ def test_parse_normalizes_fields_and_relevance():
     parsed = dripstack.parse_dripstack_response([_api_item()], query="nvidia")
 
     item = parsed[0]
-    assert item["url"] == "https://newsletter.semianalysis.com/nvidia-gpu-debt-backstop"
+    assert item["url"] == "https://newsletter.semianalysis.com/p/nvidia-gpu-debt-backstop"
     assert item["date"] == "2026-07-06"
     assert item["relevance"] == 0.84
     assert item["engagement"] == {}
@@ -112,20 +118,37 @@ def test_dripstack_activates_via_persisted_include_sources():
     """INCLUDE_SOURCES is the .env checkbox for persistent opt-ins (the
     LinkedIn/Perplexity pattern); dripstack must honor it, not only --search."""
     available = pipeline.available_sources(
-        {"INCLUDE_SOURCES": "dripstack"}, None, x_pending=False
+        {"INCLUDE_SOURCES": "dripstack", "DRIPSTACK_API_KEY": "pk_drip_test"},
+        None, x_pending=False,
     )
     assert "dripstack" in available
 
 
 def test_unrelated_include_sources_keeps_dripstack_off():
     available = pipeline.available_sources(
-        {"INCLUDE_SOURCES": "linkedin,tiktok"}, None, x_pending=False
+        {"INCLUDE_SOURCES": "linkedin,tiktok", "DRIPSTACK_API_KEY": "pk_drip_test"},
+        None, x_pending=False,
     )
     assert "dripstack" not in available
 
 
 def test_include_sources_tolerates_whitespace_around_commas():
     available = pipeline.available_sources(
-        {"INCLUDE_SOURCES": "linkedin, dripstack"}, None, x_pending=False
+        {"INCLUDE_SOURCES": "linkedin, dripstack", "DRIPSTACK_API_KEY": "pk_drip_test"},
+        None, x_pending=False,
+    )
+    assert "dripstack" in available
+
+
+def test_dripstack_requires_api_key():
+    """DripStack should not be available without DRIPSTACK_API_KEY."""
+    available = pipeline.available_sources(
+        {"INCLUDE_SOURCES": "dripstack"}, None, x_pending=False,
+    )
+    assert "dripstack" not in available
+
+    available = pipeline.available_sources(
+        {"INCLUDE_SOURCES": "dripstack", "DRIPSTACK_API_KEY": "pk_drip_test"},
+        None, x_pending=False,
     )
     assert "dripstack" in available

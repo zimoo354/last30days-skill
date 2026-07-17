@@ -60,6 +60,7 @@ KEYCHAIN_KEYS = (
     "AUTH_TOKEN", "CT0", "BSKY_HANDLE", "BSKY_APP_PASSWORD",
     "TRUTHSOCIAL_TOKEN", "BRAVE_API_KEY", "EXA_API_KEY", "SERPER_API_KEY",
     "OPENROUTER_API_KEY", "PERPLEXITY_API_KEY", "PARALLEL_API_KEY", "XQUIK_API_KEY",
+    "DRIPSTACK_API_KEY",
     "XIAOHONGSHU_API_BASE", "GITHUB_TOKEN",
 )
 
@@ -521,6 +522,7 @@ def get_config(policy: ConfigLoadPolicy | None = None) -> dict[str, Any]:
         ('LAST30DAYS_PERPLEXITY_DEEP_TIMEOUT_SECONDS', '600'),
         ('PARALLEL_API_KEY', None),
         ('XQUIK_API_KEY', None),
+        ('DRIPSTACK_API_KEY', None),
         # Host-native search signal: set by the SKILL.md agent-host path when the
         # invoking runtime has its own (better) web-search tool, so the engine's
         # keyless search floor stays off there. Defaults unset -> floor allowed.
@@ -1272,3 +1274,17 @@ def is_xquik_available(config: dict[str, Any]) -> bool:
 def get_xquik_token(config: dict[str, Any]) -> str:
     """Get Xquik API key."""
     return config.get('XQUIK_API_KEY') or ''
+
+
+# DripStack
+def is_dripstack_available(config: dict[str, Any]) -> bool:
+    """Check if DripStack newsletter search is available.
+
+    Requires DRIPSTACK_API_KEY (API key from dripstack.xyz).
+    """
+    return bool(config.get('DRIPSTACK_API_KEY'))
+
+
+def get_dripstack_token(config: dict[str, Any]) -> str:
+    """Get DripStack API key."""
+    return config.get('DRIPSTACK_API_KEY') or ''

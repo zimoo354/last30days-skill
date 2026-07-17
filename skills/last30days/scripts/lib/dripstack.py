@@ -1,10 +1,10 @@
 """DripStack source for last30days — premium financial newsletter search.
 
 DripStack indexes paid Substack newsletters, analyst writeups, and financial
-podcasts. The search endpoint is free and public (no API key); it returns
-article metadata including title, publication, date, and a relevance-scored
-snippet. Full article summaries and stock picks are behind a paid layer and
-are out of scope for this source adapter.
+podcasts. The search endpoint returns article metadata including title,
+publication, date, and a relevance-scored snippet. Requires DRIPSTACK_API_KEY
+(get one at https://dripstack.xyz). Full article summaries and stock picks
+are behind a paid layer and are out of scope for this source adapter.
 
 The signal is complementary to the other financial sources: StockTwits gives
 retail sentiment, Polymarket gives prediction-market odds, and DripStack gives
@@ -18,7 +18,8 @@ analysis, and industry research topics. Like arXiv (science) and Techmeme
 for topic match, so off-topic runs return thin results naturally and the
 engine's thin-retry + relevance scoring handles the rest.
 
-API: public, no auth. Search endpoint returns up to 30 items per query.
+API: requires DRIPSTACK_API_KEY (Bearer token, pk_drip_ prefix). Search
+endpoint returns up to 30 items per query.
 """
 
 from __future__ import annotations
@@ -48,10 +49,13 @@ def _log(msg: str) -> None:
         print(f"[DripStack] {msg}", file=sys.stderr)
 
 
-def _get_json(url: str, timeout: int = 20) -> dict[str, Any]:
+def _get_json(url: str, api_key: str, timeout: int = 20) -> dict[str, Any]:
     # All engine traffic goes through the shared lib/http.py choke point so
     # capture/replay, fixtures, and failure taxonomy apply to this source too.
-    return http.get(url, headers={"User-Agent": _UA}, timeout=timeout, retries=2)
+    headers = {"User-Agent": _UA}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return http.get(url, headers=headers, timeout=timeout, retries=2)
 
 
 def search_dripstack(
@@ -60,12 +64,13 @@ def search_dripstack(
     to_date: str | None = None,
     *,
     depth: str = "default",
+    api_key: str = "",
 ) -> list[dict[str, Any]]:
     """Search DripStack for articles matching the topic.
 
-    Returns a list of raw item dicts from the search API. The free endpoint
-    requires no authentication. Results are relevance-ranked by DripStack's
-    own scoring (hybrid RRF — blended semantic + keyword match).
+    Returns a list of raw item dicts from the search API. Requires
+    DRIPSTACK_API_KEY (Bearer token). Results are relevance-ranked by
+    DripStack's own scoring (hybrid RRF — blended semantic + keyword match).
 
     Args:
         topic: The search query (e.g. "AI capex risk", "Tesla earnings").
@@ -74,13 +79,14 @@ def search_dripstack(
             available for post-filtering if needed.
         to_date: ISO date string for end of window (YYYY-MM-DD).
         depth: One of "quick", "default", "deep" — controls result count.
+        api_key: DripStack API key (Bearer token, pk_drip_ prefix).
     """
     limit = _DEPTH_LIMITS.get(depth, 10)
     params = urllib.parse.urlencode({"q": topic, "limit": limit})
     url = f"{_SEARCH_URL}?{params}"
 
     try:
-        data = _get_json(url)
+        data = _get_json(url, api_key=api_key)
     except Exception as e:
         _log(f"search failed for '{topic}': {e}")
         return []
@@ -130,9 +136,9 @@ def parse_dripstack_response(
 
         # Build the article URL. For Substack-hosted publications the slug is
         # the full hostname (e.g. "newsletter.doomberg.com") and the post slug
-        # is the path segment. For other domains the same pattern applies.
+        # is the path segment. Substack URLs use /p/ prefix for posts.
         if pub_slug and post_slug:
-            url = f"https://{pub_slug}/{post_slug}"
+            url = f"https://{pub_slug}/p/{post_slug}"
         else:
             url = ""
 
@@ -185,15 +191,21 @@ def parse_dripstack_response(
 
 # --------------------------------------------------------------------------- #
 # Standalone CLI                                                               #
-#   python3 dripstack.py "AI capex risk"                                      #
+#   DRIPSTACK_API_KEY=pk_drip_... python3 dripstack.py "AI capex risk"         #
 # --------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
+    from . import env as _env
     topic = " ".join(sys.argv[1:]) or "AI capex"
+    config = _env.load_config()
+    api_key = _env.get_dripstack_token(config)
+    if not api_key:
+        print("Error: DRIPSTACK_API_KEY environment variable is required", file=sys.stderr)
+        sys.exit(1)
     today = datetime.date.today()
     since = (today - datetime.timedelta(days=30)).isoformat()
 
-    raw = search_dripstack(topic, from_date=since, depth="default")
+    raw = search_dripstack(topic, from_date=since, depth="default", api_key=api_key)
     items = parse_dripstack_response(raw, query=topic)
 
     print(f"Query: {topic} | {len(items)} results")

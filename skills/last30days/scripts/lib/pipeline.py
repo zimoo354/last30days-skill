@@ -215,15 +215,16 @@ def available_sources(
     # DripStack is opt-in only (owner decision, #791): a commercial
     # third-party API must never receive default-run traffic. Opt in per run
     # (--search dripstack) or persistently (INCLUDE_SOURCES=dripstack in
-    # .env, the LinkedIn/Perplexity pattern); the search API is free and
-    # public (no key), so the opt-in itself is the gate.
+    # .env, the LinkedIn/Perplexity pattern). Requires DRIPSTACK_API_KEY.
     include_sources = {
         token.strip()
         for token in (config.get("INCLUDE_SOURCES") or "").lower().split(",")
         if token.strip()
     }
-    if "dripstack" in include_sources or (
-        requested_sources and "dripstack" in requested_sources
+    if config.get("DRIPSTACK_API_KEY") and (
+        "dripstack" in include_sources or (
+            requested_sources and "dripstack" in requested_sources
+        )
     ):
         available.append("dripstack")
     if which("digg-pp-cli"):
@@ -3213,7 +3214,8 @@ def _retrieve_stream_impl(
         )
     if source == "dripstack":
         result = dripstack.search_dripstack(
-            subquery.search_query, from_date, to_date, depth=depth)
+            subquery.search_query, from_date, to_date, depth=depth,
+            api_key=env.get_dripstack_token(config))
         relevance_topic = raw_topic or topic or subquery.search_query
         return (
             dripstack.parse_dripstack_response(result, query=relevance_topic),

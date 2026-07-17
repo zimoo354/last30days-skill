@@ -131,7 +131,7 @@ python3 skills/last30days/scripts/last30days.py "MCP servers" \
 | Hacker News | none | always on | yes |
 | Polymarket | none | always on | yes |
 | StockTwits | none | auto-on for ticker/crypto topics only (gated by symbol detection); never registered for non-financial topics | yes (public API, ~200 req/hr per IP) |
-| DripStack | none | opt-in only: per run with `--search dripstack`, or persistently with `INCLUDE_SOURCES=dripstack` in `.env`. Searches premium financial newsletters and analyst writeups via a free, public search API — no key needed. Never active without the opt-in. | yes when opted in (public API, no auth) |
+| DripStack | `DRIPSTACK_API_KEY` (get one at dripstack.xyz) | opt-in only: per run with `--search dripstack`, or persistently with `INCLUDE_SOURCES=dripstack` in `.env`. Searches premium financial newsletters and analyst writeups. Never active without the opt-in and key. | no |
 | GitHub | `gh` CLI installed (uses your GitHub auth) | always on if `gh` present | yes |
 | YouTube | `yt-dlp` CLI installed; `SCRAPECREATORS_API_KEY` adds a server-side transcript fallback used only when yt-dlp fails (429 / bot-gate) | always on if `yt-dlp` present; SC transcript fallback default-on when key set (no credit spent unless yt-dlp fails) | yes |
 | YouTube comments | `yt-dlp` CLI installed — **free and keyless, no API key and no opt-in needed**. Falls back to `SCRAPECREATORS_API_KEY` + `INCLUDE_SOURCES` containing `youtube_comments` only when yt-dlp is absent. Suppress with `EXCLUDE_SOURCES=youtube_comments`. | top comments (by likes) on the top ~3 videos by engagement | yes — free via yt-dlp (no credits spent) |
@@ -170,6 +170,9 @@ BRAVE_API_KEY=<your-brave-key>
 # Optional sources
 SCRAPECREATORS_API_KEY=<your-scrapecreators-key>
 INCLUDE_SOURCES=tiktok,instagram
+# DripStack: premium financial newsletter search (get key at dripstack.xyz)
+# DRIPSTACK_API_KEY=<your-dripstack-key>
+# INCLUDE_SOURCES=tiktok,instagram,dripstack
 # Xiaohongshu is requested-only: run with --search xhs after starting a local
 # browser-session service. Defaults probe localhost, then host.docker.internal.
 # XIAOHONGSHU_API_BASE=http://localhost:18060
