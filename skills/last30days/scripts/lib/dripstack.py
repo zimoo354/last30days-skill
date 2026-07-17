@@ -137,8 +137,12 @@ def parse_dripstack_response(
         # Build the article URL. For Substack-hosted publications the slug is
         # the full hostname (e.g. "newsletter.doomberg.com") and the post slug
         # is the path segment. Substack URLs use /p/ prefix for posts.
+        # Non-Substack domains use the slug directly as the path.
         if pub_slug and post_slug:
-            url = f"https://{pub_slug}/p/{post_slug}"
+            if pub_slug.endswith(".substack.com"):
+                url = f"https://{pub_slug}/p/{post_slug}"
+            else:
+                url = f"https://{pub_slug}/{post_slug}"
         else:
             url = ""
 
@@ -190,26 +194,10 @@ def parse_dripstack_response(
 
 
 # --------------------------------------------------------------------------- #
-# Standalone CLI                                                               #
-#   DRIPSTACK_API_KEY=pk_drip_... python3 dripstack.py "AI capex risk"         #
+# Standalone CLI (not supported — use via pipeline with --search dripstack)    #
 # --------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
-    from . import env as _env
-    topic = " ".join(sys.argv[1:]) or "AI capex"
-    config = _env.load_config()
-    api_key = _env.get_dripstack_token(config)
-    if not api_key:
-        print("Error: DRIPSTACK_API_KEY environment variable is required", file=sys.stderr)
-        sys.exit(1)
-    today = datetime.date.today()
-    since = (today - datetime.timedelta(days=30)).isoformat()
-
-    raw = search_dripstack(topic, from_date=since, depth="default", api_key=api_key)
-    items = parse_dripstack_response(raw, query=topic)
-
-    print(f"Query: {topic} | {len(items)} results")
-    for it in items[:10]:
-        print(f"  [{it['relevance']:.0%}] {it['title']} ({it['author']}, {it['date'] or 'no date'})")
-        if it["snippet"]:
-            print(f"    {it['snippet'][:120]}")
+    print("Standalone mode not supported. Use via pipeline:")
+    print("  python3 last30days.py 'topic' --search dripstack")
+    sys.exit(1)

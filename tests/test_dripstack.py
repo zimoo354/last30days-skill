@@ -82,13 +82,20 @@ def test_parse_normalizes_fields_and_relevance():
     parsed = dripstack.parse_dripstack_response([_api_item()], query="nvidia")
 
     item = parsed[0]
-    assert item["url"] == "https://newsletter.semianalysis.com/p/nvidia-gpu-debt-backstop"
+    # SemiAnalysis uses custom domain (not .substack.com), so no /p/ prefix
+    assert item["url"] == "https://newsletter.semianalysis.com/nvidia-gpu-debt-backstop"
     assert item["date"] == "2026-07-06"
     assert item["relevance"] == 0.84
     assert item["engagement"] == {}
     assert item["author"] == "newsletter.semianalysis"
     assert "Hybrid" not in item["why_relevant"]
     assert item["metadata"]["publication_slug"] == "newsletter.semianalysis.com"
+
+
+def test_parse_adds_p_prefix_for_substack_domains():
+    item = _api_item(publicationSlug="doomberg.substack.com")
+    parsed = dripstack.parse_dripstack_response([item], query="nvidia")
+    assert parsed[0]["url"] == "https://doomberg.substack.com/p/nvidia-gpu-debt-backstop"
 
 
 def test_parse_handles_missing_fields_conservatively():
